@@ -113,8 +113,8 @@ with tab1:
                         if success:
                             st.success("Erfolgreich registriert!")
                             # Generiere Link (Ersetze 'deine-app.streamlit.app' später durch deine echte URL)
-                            link = f"https://network-graph.streamlit.app/?invite={result}"
-                            
+                            link = f"https://vanselow-network.streamlit.app/?invite={result}"   
+
                             st.markdown("---")
                             st.subheader("Dein persönlicher Einladungs-Link:")
                             st.code(link)
