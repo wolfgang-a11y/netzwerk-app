@@ -18,13 +18,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- LOKALE DATENBANK (SQLITE) ---
+# --- LOKALE DATENBANK ---
 def init_db():
     conn = sqlite3.connect('netzwerk.db', check_same_thread=False)
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS members 
                  (id TEXT, name TEXT, email TEXT, phone TEXT, invited TEXT, slug TEXT, timestamp TEXT)''')
-    # Gary als Startpunkt anlegen, falls leer
     c.execute("SELECT COUNT(*) FROM members")
     if c.fetchone()[0] == 0:
         c.execute("INSERT INTO members VALUES (?,?,?,?,?,?,?)", 
@@ -36,6 +35,12 @@ conn = init_db()
 
 def get_df():
     return pd.read_sql_query("SELECT * FROM members", conn)
+
+def get_qr(url):
+    qr = qrcode.make(url)
+    buf = BytesIO()
+    qr.save(buf, format="PNG")
+    return buf.getvalue()
 
 # --- APP LOGIK ---
 invite_slug = st.query_params.get("invite", None)
@@ -55,11 +60,15 @@ with tab1:
                 phone = st.text_input("Handy")
                 if st.form_submit_button("JETZT BEITRETEN"):
                     if name and email and phone:
+                        # Check ob bereits registriert
                         if email in df['email'].values:
-                            st.error("Bereits registriert.")
+                            user = df[df['email'] == email].iloc[0]
+                            st.warning(f"Du bist bereits registriert, {user['name']}!")
+                            link = f"https://vanselow-network.streamlit.app/?invite={user['slug']}"
+                            st.code(link)
+                            st.image(get_qr(link), width=200)
                         else:
                             new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0])
-                            # Dubletten-Check für Slug
                             if new_slug in df['slug'].values: new_slug += str(len(df))
                             
                             c = conn.cursor()
@@ -67,24 +76,30 @@ with tab1:
                                       (str(uuid.uuid4()), name, email, phone, inviter['id'], new_slug, datetime.now().strftime("%d.%m.%Y %H:%M")))
                             conn.commit()
                             st.success(f"Willkommen, {name}!")
-                            st.code(f"https://vanselow-network.streamlit.app/?invite={new_slug}")
+                            link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
+                            st.code(link)
+                            st.image(get_qr(link), width=200)
                             st.balloons()
-                            st.rerun()
                     else: st.warning("Bitte Felder ausfüllen.")
         else: st.error("Link ungültig.")
     else:
         st.title("🔐 Geschlossenes System")
-        st.info("Zutritt nur mit persönlichem Link möglich.")
+        with st.expander("Link vergessen / bereits registriert?"):
+            mail_check = st.text_input("Deine E-Mail Adresse:")
+            if st.button("Link abrufen"):
+                user = df[df['email'] == mail_check]
+                if not user.empty:
+                    link = f"https://vanselow-network.streamlit.app/?invite={user.iloc[0]['slug']}"
+                    st.success("Gefunden! Hier ist dein Einladungslink:")
+                    st.code(link)
+                    st.image(get_qr(link), width=200)
+                else: st.error("E-Mail nicht gefunden.")
 
 with tab2:
     st.subheader("Admin-Bereich")
     if st.sidebar.text_input("Passwort", type="password") == "gary123":
         df = get_df()
-        st.write("### Aktuelle Mitglieder")
-        st.dataframe(df)
-        
-        # Datensicherung
-        st.divider()
+        st.write("### Alle Mitglieder & Links")
+        st.dataframe(df[['name', 'email', 'slug', 'timestamp']])
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Mitgliederliste (CSV) exportieren", data=csv, file_name="netzwerk_backup.csv", mime="text/csv")
-        st.caption("Tipp: Speichere diese Datei regelmäßig als Backup.")
+        st.download_button("📥 Backup (CSV) exportieren", data=csv, file_name="backup.csv")
