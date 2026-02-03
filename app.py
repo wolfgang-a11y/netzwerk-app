@@ -7,9 +7,9 @@ import re
 from io import BytesIO
 from datetime import datetime
 
-# --- NOTION KONFIGURATION ---
+# --- NOTION KONFIGURATION (JETZT MIT DER KORREKTEN ID) ---
 NOTION_TOKEN = "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"
-DATABASE_ID = "2f57b7e3c9cd809d993feb456d8d8c01"
+DATABASE_ID = "2fc7b7e3c9cd80c095ffeb71649ed94d"
 
 headers = {
     "Authorization": "Bearer " + NOTION_TOKEN,
@@ -38,7 +38,6 @@ def get_members_from_notion():
             members = []
             for row in data["results"]:
                 props = row["properties"]
-                # Wir lesen die Daten vorsichtig aus, falls Spalten fehlen
                 members.append({
                     "name": props["Name"]["title"][0]["text"]["content"] if props.get("Name") and props["Name"]["title"] else "",
                     "email": props["Email"]["email"] if props.get("Email") and props["Email"]["email"] else "",
@@ -79,12 +78,10 @@ tab1, tab2 = st.tabs(["🤝 Netzwerk-Beitritt", "⚙️ Verwaltung"])
 
 with tab1:
     if invite_slug:
-        # Sonderlogik für den ersten Start mit Gary
         if invite_slug.lower() == "gary":
             inviter_name = "Direktion Vanselow"
         else:
-            # Suche Einlader in den geladenen Daten
-            inviter_row = df[df['slug'] == invite_slug]
+            inviter_row = df[df['slug'] == invite_slug] if not df.empty else pd.DataFrame()
             inviter_name = inviter_row.iloc[0]['name'] if not inviter_row.empty else None
 
         if inviter_name:
@@ -96,7 +93,6 @@ with tab1:
                 phone = st.text_input("Handynummer")
                 if st.form_submit_button("JETZT BEITRETEN"):
                     if name and email and phone:
-                        # Check ob E-Mail schon existiert
                         if not df.empty and email in df['email'].values:
                             st.warning("Bereits registriert!")
                             user_slug = df[df['email'] == email].iloc[0]['slug']
@@ -104,10 +100,7 @@ with tab1:
                             st.code(link)
                             st.image(get_qr(link), width=200)
                         else:
-                            # Neuen Slug generieren
                             new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0])
-                            
-                            # Versuch in Notion zu speichern
                             res = add_member_to_notion(name, email, phone, inviter_name, new_slug)
                             
                             if res.status_code == 200:
@@ -116,18 +109,19 @@ with tab1:
                                 st.code(link)
                                 st.image(get_qr(link), width=200)
                                 st.balloons()
+                                st.info("Erfolgreich in Notion gespeichert.")
                             else:
-                                st.error("Fehler beim Speichern in Notion.")
-                                st.write("Technischer Grund:", res.text)
+                                st.error("Fehler beim Speichern.")
+                                st.write("Grund:", res.text)
                     else:
                         st.warning("Bitte alle Felder ausfüllen.")
         else:
-            st.error("Dieser Einladungslink ist ungültig.")
+            st.error("Link ungültig.")
     else:
         st.title("🔐 Geschlossenes System")
-        st.info("Beitritt nur über einen persönlichen Einladungslink möglich.")
+        st.info("Beitritt nur über Einladung möglich.")
 
 with tab2:
     if st.sidebar.text_input("Passwort", type="password") == "gary123":
-        st.subheader("Aktuelle Liste (aus Notion)")
+        st.subheader("Live-Daten aus Notion")
         st.dataframe(df)
