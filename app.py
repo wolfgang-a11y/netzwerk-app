@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
 import uuid
 import qrcode
 import requests
@@ -19,7 +18,7 @@ headers = {
 }
 
 # --- SETUP & DESIGN ---
-st.set_page_config(page_title="Trust Graph | Notion Live", page_icon="🔐")
+st.set_page_config(page_title="Trust Graph | Notion Live", page_icon="🔐", layout="centered")
 
 st.markdown("""
     <style>
@@ -32,22 +31,24 @@ st.markdown("""
 # --- NOTION FUNKTIONEN ---
 def get_members_from_notion():
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
-    response = requests.post(url, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        members = []
-        for row in data["results"]:
-            props = row["properties"]
-            members.append({
-                "id": row["id"],
-                "name": props["Name"]["title"][0]["text"]["content"] if props["Name"]["title"] else "",
-                "email": props["Email"]["email"] if props["Email"]["email"] else "",
-                "slug": props["Slug"]["rich_text"][0]["text"]["content"] if props["Slug"]["rich_text"] else "",
-                "phone": props["Handy"]["rich_text"][0]["text"]["content"] if props["Handy"]["rich_text"] else ""
-            })
-        return pd.DataFrame(members)
-    else:
-        return pd.DataFrame(columns=["id", "name", "email", "slug", "phone"])
+    try:
+        response = requests.post(url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            members = []
+            for row in data["results"]:
+                props = row["properties"]
+                # Wir lesen die Daten vorsichtig aus, falls Spalten fehlen
+                members.append({
+                    "name": props["Name"]["title"][0]["text"]["content"] if props.get("Name") and props["Name"]["title"] else "",
+                    "email": props["Email"]["email"] if props.get("Email") and props["Email"]["email"] else "",
+                    "slug": props["Slug"]["rich_text"][0]["text"]["content"] if props.get("Slug") and props["Slug"]["rich_text"] else ""
+                })
+            return pd.DataFrame(members)
+        else:
+            return pd.DataFrame(columns=["name", "email", "slug"])
+    except:
+        return pd.DataFrame(columns=["name", "email", "slug"])
 
 def add_member_to_notion(name, email, phone, inviter_name, slug):
     url = "https://api.notion.com/v1/pages"
@@ -61,7 +62,8 @@ def add_member_to_notion(name, email, phone, inviter_name, slug):
             "Slug": {"rich_text": [{"text": {"content": slug}}]}
         }
     }
-    requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json=payload)
+    return response
 
 def get_qr(url):
     qr = qrcode.make(url)
@@ -77,10 +79,11 @@ tab1, tab2 = st.tabs(["🤝 Netzwerk-Beitritt", "⚙️ Verwaltung"])
 
 with tab1:
     if invite_slug:
-        # Check ob Gary gerufen wurde (da Gary nicht zwingend in Notion stehen muss zu Beginn)
+        # Sonderlogik für den ersten Start mit Gary
         if invite_slug.lower() == "gary":
             inviter_name = "Direktion Vanselow"
         else:
+            # Suche Einlader in den geladenen Daten
             inviter_row = df[df['slug'] == invite_slug]
             inviter_name = inviter_row.iloc[0]['name'] if not inviter_row.empty else None
 
@@ -90,35 +93,41 @@ with tab1:
             with st.form("join"):
                 name = st.text_input("Vor- & Nachname")
                 email = st.text_input("E-Mail")
-                phone = st.text_input("Handy")
+                phone = st.text_input("Handynummer")
                 if st.form_submit_button("JETZT BEITRETEN"):
                     if name and email and phone:
-                        if email in df['email'].values:
-                            user = df[df['email'] == email].iloc[0]
-                            st.warning(f"Bereits registriert!")
-                            link = f"https://vanselow-network.streamlit.app/?invite={user['slug']}"
+                        # Check ob E-Mail schon existiert
+                        if not df.empty and email in df['email'].values:
+                            st.warning("Bereits registriert!")
+                            user_slug = df[df['email'] == email].iloc[0]['slug']
+                            link = f"https://vanselow-network.streamlit.app/?invite={user_slug}"
                             st.code(link)
                             st.image(get_qr(link), width=200)
                         else:
+                            # Neuen Slug generieren
                             new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0])
-                            if new_slug in df['slug'].values: new_slug += str(len(df))
                             
-                            # In Notion speichern
-                            add_member_to_notion(name, email, phone, inviter_name, new_slug)
+                            # Versuch in Notion zu speichern
+                            res = add_member_to_notion(name, email, phone, inviter_name, new_slug)
                             
-                            st.success(f"Willkommen im Netzwerk, {name}!")
-                            link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
-                            st.code(link)
-                            st.image(get_qr(link), width=200)
-                            st.balloons()
-                            st.info("Daten wurden sicher in Notion gespeichert.")
-                    else: st.warning("Bitte Felder ausfüllen.")
-        else: st.error("Link ungültig.")
+                            if res.status_code == 200:
+                                st.success(f"Willkommen im Netzwerk, {name}!")
+                                link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
+                                st.code(link)
+                                st.image(get_qr(link), width=200)
+                                st.balloons()
+                            else:
+                                st.error("Fehler beim Speichern in Notion.")
+                                st.write("Technischer Grund:", res.text)
+                    else:
+                        st.warning("Bitte alle Felder ausfüllen.")
+        else:
+            st.error("Dieser Einladungslink ist ungültig.")
     else:
         st.title("🔐 Geschlossenes System")
-        st.info("Zutritt nur mit persönlichem Link möglich.")
+        st.info("Beitritt nur über einen persönlichen Einladungslink möglich.")
 
 with tab2:
-    if st.sidebar.text_input("Admin-Passwort", type="password") == "gary123":
-        st.subheader("Live-Daten aus Notion")
+    if st.sidebar.text_input("Passwort", type="password") == "gary123":
+        st.subheader("Aktuelle Liste (aus Notion)")
         st.dataframe(df)
