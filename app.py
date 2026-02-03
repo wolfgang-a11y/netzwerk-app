@@ -7,9 +7,9 @@ import re
 from io import BytesIO
 from datetime import datetime
 
-# --- NOTION KONFIGURATION (JETZT MIT DER ECHTEN ID AUS DEINEM LINK) ---
+# --- NOTION KONFIGURATION ---
 NOTION_TOKEN = "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"
-DATABASE_ID = "2fc7b7e3c9cd80c095ffeb71649ed94d"
+DATABASE_ID = "2fc7b7e3c9cd809d993feb456d8d8c01"
 
 headers = {
     "Authorization": "Bearer " + NOTION_TOKEN,
@@ -18,24 +18,26 @@ headers = {
 }
 
 # --- SETUP & DESIGN ---
-st.set_page_config(page_title="Trust Graph | Notion Live", page_icon="🔐", layout="centered")
+st.set_page_config(page_title="Trust Graph | Profi-Netzwerk", page_icon="🔐", layout="centered")
 
 st.markdown("""
     <style>
-    .stButton>button {
-        width: 100%; 
-        background-color: #D4AF37 !important; 
-        color: black !important; 
-        font-weight: bold; 
-        height: 3.5em;
-        border: none;
-    }
+    .stButton>button { width: 100%; background-color: #D4AF37 !important; color: black !important; font-weight: bold; height: 3.5em; border: none; }
     h1, h2, h3 {color: #D4AF37 !important;}
     .inviter-box {padding:20px; border:1px solid #D4AF37; border-radius:10px; background-color:#1a1c23; text-align:center; margin-bottom:20px;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- NOTION FUNKTIONEN ---
+# --- HELFER-FUNKTIONEN ---
+def format_phone(number):
+    """Macht aus 0173... automatisch +49173..."""
+    clean = re.sub(r'[^0-9+]', '', number) # Nur Zahlen und + behalten
+    if clean.startswith('0') and not clean.startswith('00'):
+        clean = '+49' + clean[1:]
+    elif clean.startswith('00'):
+        clean = '+' + clean[2:]
+    return clean
+
 def get_members_from_notion():
     url = f"https://api.notion.com/v1/databases/{DATABASE_ID}/query"
     try:
@@ -45,44 +47,31 @@ def get_members_from_notion():
             members = []
             for row in data["results"]:
                 props = row["properties"]
-                # Email-Feld sicher auslesen
                 email_val = props["Email"]["email"] if "Email" in props and props["Email"]["email"] else ""
-                # Slug-Feld sicher auslesen
-                slug_val = ""
-                if "Slug" in props and props["Slug"].get("rich_text"):
-                    slug_val = props["Slug"]["rich_text"][0]["text"]["content"]
-
+                slug_val = props["Slug"]["rich_text"][0]["text"]["content"] if "Slug" in props and props["Slug"].get("rich_text") else ""
                 members.append({
                     "name": props["Name"]["title"][0]["text"]["content"] if props.get("Name") and props["Name"]["title"] else "",
-                    "email": email_val,
+                    "email": email_val.lower(),
                     "slug": slug_val
                 })
             return pd.DataFrame(members)
-        else:
-            return pd.DataFrame(columns=["name", "email", "slug"])
+        return pd.DataFrame(columns=["name", "email", "slug"])
     except:
         return pd.DataFrame(columns=["name", "email", "slug"])
 
-def add_member_to_notion(name, email, phone, inviter_name, slug):
+def add_member_to_notion(full_name, email, phone, inviter_name, slug):
     url = "https://api.notion.com/v1/pages"
     payload = {
         "parent": {"database_id": DATABASE_ID},
         "properties": {
-            "Name": {"title": [{"text": {"content": name}}]},
-            "Email": {"email": email},
+            "Name": {"title": [{"text": {"content": full_name}}]},
+            "Email": {"email": email.lower()},
             "Handy": {"phone_number": phone},
             "Einlader": {"rich_text": [{"text": {"content": inviter_name}}]},
             "Slug": {"rich_text": [{"text": {"content": slug}}]}
         }
     }
-    response = requests.post(url, headers=headers, json=payload)
-    return response
-
-def get_qr(url):
-    qr = qrcode.make(url)
-    buf = BytesIO()
-    qr.save(buf, format="PNG")
-    return buf.getvalue()
+    return requests.post(url, headers=headers, json=payload)
 
 # --- APP LOGIK ---
 df = get_members_from_notion()
@@ -95,39 +84,54 @@ with tab1:
         if invite_slug.lower() == "gary":
             inviter_name = "Direktion Vanselow"
         else:
-            inviter_row = df[df['slug'] == invite_slug] if not df.empty else pd.DataFrame()
+            inviter_row = df[df['slug'] == invite_slug.lower()] if not df.empty else pd.DataFrame()
             inviter_name = inviter_row.iloc[0]['name'] if not inviter_row.empty else None
 
         if inviter_name:
             st.markdown(f"<div class='inviter-box'><p style='color:#888;margin:0;'>EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
             
             with st.form("join"):
-                name = st.text_input("Vor- & Nachname")
-                email = st.text_input("E-Mail Adresse")
-                phone = st.text_input("Handynummer")
-                submit = st.form_submit_button("JETZT BEITRETEN")
+                col1, col2 = st.columns(2)
+                with col1:
+                    vorname = st.text_input("Vorname")
+                with col2:
+                    nachname = st.text_input("Nachname")
                 
-                if submit:
-                    if name and email and phone:
-                        if not df.empty and email in df['email'].values:
+                email = st.text_input("E-Mail Adresse")
+                phone = st.text_input("Handynummer", placeholder="0173 1234567")
+                
+                if st.form_submit_button("JETZT BEITRETEN"):
+                    if vorname and nachname and email and phone:
+                        full_name = f"{vorname} {nachname}"
+                        clean_phone = format_phone(phone)
+                        clean_email = email.lower().strip()
+                        
+                        if not df.empty and clean_email in df['email'].values:
                             st.warning("Bereits registriert!")
-                            user_slug = df[df['email'] == email].iloc[0]['slug']
+                            user_slug = df[df['email'] == clean_email].iloc[0]['slug']
                             link = f"https://vanselow-network.streamlit.app/?invite={user_slug}"
                             st.code(link)
-                            st.image(get_qr(link), width=200)
                         else:
-                            new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0]).lower()
-                            res = add_member_to_notion(name, email, phone, inviter_name, new_slug)
+                            # Slug generieren (nur Vorname)
+                            new_slug = re.sub(r'[^a-zA-Z]', '', vorname).lower()
+                            # Falls Slug existiert, Nachname-Anfang anhängen
+                            if not df.empty and new_slug in df['slug'].values:
+                                new_slug += nachname[0].lower()
+
+                            res = add_member_to_notion(full_name, clean_email, clean_phone, inviter_name, new_slug)
                             
                             if res.status_code == 200:
-                                st.success(f"Willkommen im Netzwerk, {name}!")
+                                st.success(f"Willkommen, {full_name}!")
                                 link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
                                 st.code(link)
-                                st.image(get_qr(link), width=200)
+                                qr = qrcode.make(link)
+                                buf = BytesIO()
+                                qr.save(buf, format="PNG")
+                                st.image(buf.getvalue(), width=200)
                                 st.balloons()
                             else:
-                                st.error("Fehler beim Speichern in Notion.")
-                                st.write("Technischer Grund:", res.text)
+                                st.error("Fehler beim Speichern.")
+                                st.write(res.text)
                     else:
                         st.warning("Bitte alle Felder ausfüllen.")
         else:
