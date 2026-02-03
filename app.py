@@ -7,9 +7,9 @@ import re
 from io import BytesIO
 from datetime import datetime
 
-# --- NOTION KONFIGURATION (JETZT MIT DER KORREKTEN ID) ---
+# --- NOTION KONFIGURATION ---
 NOTION_TOKEN = "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"
-DATABASE_ID = "2fc7b7e3c9cd80c095ffeb71649ed94d"
+DATABASE_ID = "2fc7b7e3c9cd809d993feb456d8d8c01"
 
 headers = {
     "Authorization": "Bearer " + NOTION_TOKEN,
@@ -22,7 +22,14 @@ st.set_page_config(page_title="Trust Graph | Notion Live", page_icon="🔐", lay
 
 st.markdown("""
     <style>
-    .stButton>button {width:100%; background-color:#D4AF37 !important; color:black !important; font-weight:bold; height:3em;}
+    .stButton>button {
+        width: 100%; 
+        background-color: #D4AF37 !important; 
+        color: black !important; 
+        font-weight: bold; 
+        height: 3.5em;
+        border: none;
+    }
     h1, h2, h3 {color: #D4AF37 !important;}
     .inviter-box {padding:20px; border:1px solid #D4AF37; border-radius:10px; background-color:#1a1c23; text-align:center; margin-bottom:20px;}
     </style>
@@ -38,10 +45,19 @@ def get_members_from_notion():
             members = []
             for row in data["results"]:
                 props = row["properties"]
+                
+                # Email aus dem Email-Feld lesen
+                email_val = props["Email"]["email"] if "Email" in props and props["Email"]["email"] else ""
+                
+                # Slug aus dem Text-Feld lesen
+                slug_val = ""
+                if "Slug" in props and props["Slug"].get("rich_text"):
+                    slug_val = props["Slug"]["rich_text"][0]["text"]["content"]
+
                 members.append({
                     "name": props["Name"]["title"][0]["text"]["content"] if props.get("Name") and props["Name"]["title"] else "",
-                    "email": props["Email"]["email"] if props.get("Email") and props["Email"]["email"] else "",
-                    "slug": props["Slug"]["rich_text"][0]["text"]["content"] if props.get("Slug") and props["Slug"]["rich_text"] else ""
+                    "email": email_val,
+                    "slug": slug_val
                 })
             return pd.DataFrame(members)
         else:
@@ -51,14 +67,16 @@ def get_members_from_notion():
 
 def add_member_to_notion(name, email, phone, inviter_name, slug):
     url = "https://api.notion.com/v1/pages"
+    
+    # Hier ist die wichtige Anpassung an deine neuen Spalten-Typen:
     payload = {
         "parent": {"database_id": DATABASE_ID},
         "properties": {
             "Name": {"title": [{"text": {"content": name}}]},
-            "Email": {"email": email},
-            "Handy": {"rich_text": [{"text": {"content": phone}}]},
-            "Einlader": {"rich_text": [{"text": {"content": inviter_name}}]},
-            "Slug": {"rich_text": [{"text": {"content": slug}}]}
+            "Email": {"email": email}, # Notion-Typ: Email
+            "Handy": {"phone_number": phone}, # Notion-Typ: Phone
+            "Einlader": {"rich_text": [{"text": {"content": inviter_name}}]}, # Notion-Typ: Text
+            "Slug": {"rich_text": [{"text": {"content": slug}}]} # Notion-Typ: Text
         }
     }
     response = requests.post(url, headers=headers, json=payload)
@@ -89,10 +107,13 @@ with tab1:
             
             with st.form("join"):
                 name = st.text_input("Vor- & Nachname")
-                email = st.text_input("E-Mail")
+                email = st.text_input("E-Mail Adresse")
                 phone = st.text_input("Handynummer")
-                if st.form_submit_button("JETZT BEITRETEN"):
+                submit = st.form_submit_button("JETZT BEITRETEN")
+                
+                if submit:
                     if name and email and phone:
+                        # Check ob bereits registriert
                         if not df.empty and email in df['email'].values:
                             st.warning("Bereits registriert!")
                             user_slug = df[df['email'] == email].iloc[0]['slug']
@@ -100,7 +121,10 @@ with tab1:
                             st.code(link)
                             st.image(get_qr(link), width=200)
                         else:
-                            new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0])
+                            # Neuen Link-Namen (Slug) erstellen
+                            new_slug = re.sub(r'[^a-zA-Z]', '', name.split()[0]).lower()
+                            
+                            # In Notion speichern
                             res = add_member_to_notion(name, email, phone, inviter_name, new_slug)
                             
                             if res.status_code == 200:
@@ -109,10 +133,9 @@ with tab1:
                                 st.code(link)
                                 st.image(get_qr(link), width=200)
                                 st.balloons()
-                                st.info("Erfolgreich in Notion gespeichert.")
                             else:
                                 st.error("Fehler beim Speichern.")
-                                st.write("Grund:", res.text)
+                                st.write("Technischer Grund:", res.text)
                     else:
                         st.warning("Bitte alle Felder ausfüllen.")
         else:
