@@ -46,22 +46,19 @@ def get_members_from_notion():
                 props = row["properties"]
                 email_val = props["Email"]["email"] if "Email" in props and props["Email"]["email"] else ""
                 slug_val = props["Slug"]["rich_text"][0]["text"]["content"] if "Slug" in props and props["Slug"].get("rich_text") else ""
-                birth_val = props["Birth Date"]["rich_text"][0]["text"]["content"] if "Birth Date" in props and props["Birth Date"].get("rich_text") else ""
                 members.append({
                     "Name": props["Name"]["title"][0]["text"]["content"] if props.get("Name") and props["Name"]["title"] else "Unbekannt",
-                    "Email": email_val.lower(),
-                    "Geburtstag": birth_val,
+                    "Email": email_val.lower().strip(),
                     "Code": slug_val
                 })
             return pd.DataFrame(members)
-        return pd.DataFrame(columns=["Name", "Email", "Geburtstag", "Code"])
+        return pd.DataFrame(columns=["Name", "Email", "Code"])
     except:
-        return pd.DataFrame(columns=["Name", "Email", "Geburtstag", "Code"])
+        return pd.DataFrame(columns=["Name", "Email", "Code"])
 
 def add_member_to_notion(full_name, email, phone, inviter_name, slug, birth_date_obj):
     url = "https://api.notion.com/v1/pages"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
-    # Wir formatieren das Datum hier als deutschen Text
     birth_date_str = birth_date_obj.strftime("%d.%m.%Y")
     
     payload = {
@@ -101,30 +98,39 @@ with tab1:
         if inviter_name:
             st.markdown(f"<div class='inviter-box'><p style='color:#888;margin:0;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
             with st.form("join"):
+                st.write("### Deine Daten")
                 col1, col2 = st.columns(2)
-                with col1: vorname = st.text_input("Vorname")
-                with col2: nachname = st.text_input("Nachname")
+                with col1:
+                    vorname = st.text_input("Vorname", placeholder="z.B. Max")
+                with col2:
+                    nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
                 
-                email = st.text_input("E-Mail Adresse")
-                phone = st.text_input("Handynummer (+49...)")
+                email = st.text_input("E-Mail Adresse", placeholder="name@beispiel.de")
+                phone = st.text_input("Handynummer (+49...)", placeholder="+49 173 1234567")
                 
-                # Datum-Picker bleibt (bequem für Nutzer), aber wir speichern es als Text
-                birth_date_picker = st.date_input("Geburtsdatum", min_value=datetime(1940, 1, 1), max_value=datetime.now())
+                # Datum-Eingabe im deutschen Format
+                birth_date_picker = st.date_input(
+                    "Geburtsdatum", 
+                    min_value=datetime(1940, 1, 1), 
+                    max_value=datetime.now(),
+                    format="DD.MM.YYYY"
+                )
                 
                 if st.form_submit_button("JETZT BEITRETEN"):
                     clean_phone = format_phone(phone)
                     if vorname and nachname and email and phone:
                         if len(re.sub(r'[^0-9]', '', clean_phone)) < 10:
-                            st.error("Bitte gib eine gültige Handynummer ein.")
+                            st.error("Bitte gib eine gültige Handynummer ein (mind. 8 Ziffern).")
                         elif not df.empty and email.lower().strip() in df['Email'].values:
                             st.warning("Bereits registriert!")
                             user_slug = df[df['Email'] == email.lower().strip()].iloc[0]['Code']
-                            st.code(f"https://vanselow-network.streamlit.app/?invite={user_slug}")
+                            link = f"https://vanselow-network.streamlit.app/?invite={user_slug}"
+                            st.code(link)
+                            st.image(get_qr(link), width=200)
                         else:
                             full_name = f"{vorname.strip()} {nachname.strip()}"
                             new_slug = re.sub(r'[^a-zA-Z]', '', vorname).lower()
                             
-                            # Hier wird das Datum-Objekt an die Speicherfunktion übergeben
                             res = add_member_to_notion(full_name, email.lower().strip(), clean_phone, inviter_name, new_slug, birth_date_picker)
                             
                             if res.status_code == 200:
@@ -134,16 +140,16 @@ with tab1:
                                 st.image(get_qr(final_link), width=200)
                                 st.balloons()
                             else:
-                                st.error("Fehler beim Speichern. Hast du 'Birth Date' in Notion auf Text umgestellt?")
-                                st.write("Grund:", res.text)
-                    else: st.error("Bitte alles ausfüllen.")
+                                st.error("Fehler beim Speichern in Notion.")
+                                st.write("Details:", res.text)
+                    else: st.error("Bitte alle Felder ausfüllen.")
         else: st.error("Link ungültig.")
     else:
         st.title("🔐 Geschlossenes System")
         st.info("Beitritt nur über persönlichen Link möglich.")
 
 with tab2:
-    if st.sidebar.text_input("Passwort", type="password") == "gary123":
+    if st.sidebar.text_input("Admin-Passwort", type="password") == "gary123":
         st.metric("Mitglieder", len(df))
         st.dataframe(df, use_container_width=True)
         csv = df.to_csv(index=False).encode('utf-8')
