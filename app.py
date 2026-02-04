@@ -18,29 +18,45 @@ headers = {
 }
 
 # --- SETUP & DESIGN ---
-# page_title und page_icon helfen WhatsApp bei der Vorschau
 st.set_page_config(
-    page_title="Exklusiver Trust Graph", 
+    page_title="Direktion Vanselow | Netzwerk", 
     page_icon="🔐", 
     layout="centered"
 )
 
-# Meta-Tags für WhatsApp Vorschau erzwingen
+# Das Bild, das wir bei GitHub hochgeladen haben (Link zur 'Raw'-Datei)
+GARY_IMAGE_URL = "https://raw.githubusercontent.com/wolfgang-a11y/netzwerk-app/main/gary.png"
+
+# Meta-Daten für die "sexy" Vorschau in WhatsApp/Telegram
 st.markdown(
     f"""
     <head>
-        <meta property="og:title" content="Exklusives Netzwerk - Direktion Vanselow" />
-        <meta property="og:description" content="Sichere dir deinen Zugang zum geschlossenen Netzwerk." />
-        <meta property="og:image" content="https://raw.githubusercontent.com/wolfgang-a11y/netzwerk-app/main/logo.png" />
+        <meta property="og:title" content="Einladung von Direktion Vanselow" />
+        <meta property="og:description" content="Exklusiver Zugang zum geschlossenen Netzwerk." />
+        <meta property="og:image" content="{GARY_IMAGE_URL}" />
+        <meta property="og:type" content="website" />
     </head>
     """, unsafe_allow_html=True
 )
 
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; background-color: #D4AF37 !important; color: black !important; font-weight: bold; height: 3.5em; border: none; }
+    .stButton>button { width: 100%; background-color: #D4AF37 !important; color: black !important; font-weight: bold; height: 3.5em; border: none; border-radius: 8px; }
     h1, h2, h3 {color: #D4AF37 !important;}
-    .inviter-box {padding:20px; border:1px solid #D4AF37; border-radius:10px; background-color:#1a1c23; text-align:center; margin-bottom:20px;}
+    .inviter-box {
+        padding: 30px; 
+        border: 1px solid #D4AF37; 
+        border-radius: 15px; 
+        background-color: #1a1c23; 
+        text-align: center; 
+        margin-bottom: 25px;
+    }
+    .gary-img {
+        border-radius: 50%;
+        border: 3px solid #D4AF37;
+        margin-bottom: 15px;
+        object-fit: cover;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -106,19 +122,26 @@ with tab1:
     if invite_slug:
         if invite_slug.lower() == "gary":
             inviter_name = "Direktion Vanselow"
+            show_gary_pic = True
         else:
             inviter_row = df[df['Code'] == invite_slug.lower()] if not df.empty else pd.DataFrame()
             inviter_name = inviter_row.iloc[0]['Name'] if not inviter_row.empty else None
+            show_gary_pic = False
 
         if inviter_name:
-            st.markdown(f"<div class='inviter-box'><p style='color:#888;margin:0;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
+            # Edle Einladungs-Box mit Bild (falls Gary einlädt)
+            st.markdown("<div class='inviter-box'>", unsafe_allow_html=True)
+            if show_gary_pic:
+                st.image(GARY_IMAGE_URL, width=120)
+            st.markdown(f"<p style='color:#888;margin:0;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
+            
             with st.form("join"):
                 st.write("### Deine Daten")
                 col1, col2 = st.columns(2)
                 with col1: vorname = st.text_input("Vorname", placeholder="z.B. Max")
                 with col2: nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
                 email = st.text_input("E-Mail Adresse", placeholder="name@beispiel.de")
-                phone = st.text_input("Handynummer (+49...)", placeholder="+49 173 1234567")
+                phone = st.text_input("Handynummer", placeholder="+49 173 1234567")
                 birth_date_picker = st.date_input("Geburtsdatum", min_value=datetime(1940, 1, 1), max_value=datetime.now(), format="DD.MM.YYYY")
                 
                 if st.form_submit_button("JETZT BEITRETEN"):
@@ -135,7 +158,7 @@ with tab1:
                             new_slug = re.sub(r'[^a-zA-Z]', '', vorname).lower()
                             res = add_member_to_notion(full_name, email.lower().strip(), clean_phone, inviter_name, new_slug, birth_date_picker)
                             if res.status_code == 200:
-                                st.success(f"Willkommen, {vorname}!")
+                                st.success(f"Willkommen im Team, {vorname}!")
                                 final_link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
                                 st.divider()
                                 st.write("### Dein Einladungs-Link:")
