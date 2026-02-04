@@ -25,10 +25,10 @@ st.set_page_config(
     layout="centered"
 )
 
-# Dynamische Bild-URL für WhatsApp (angepasst an deinen GitHub Branch 'hauptsächlich')
-GARY_RAW_URL = "https://raw.githubusercontent.com/wolfgang-a11y/Netzwerk-App/hauptsächlich/gary.png"
+# Pfad für WhatsApp (angepasst an deinen Branch 'hauptsächlich' und 'Gary.png')
+GARY_RAW_URL = "https://raw.githubusercontent.com/wolfgang-a11y/Netzwerk-App/hauptsächlich/Gary.png"
 
-# Meta-Tags für WhatsApp Vorschau
+# Meta-Tags für WhatsApp/Telegram Vorschau
 st.markdown(
     f"""
     <head>
@@ -45,7 +45,7 @@ st.markdown("""
     .stButton>button { width: 100%; background-color: #D4AF37 !important; color: black !important; font-weight: bold; height: 3.5em; border: none; border-radius: 8px; }
     h1, h2, h3 {color: #D4AF37 !important;}
     .inviter-box {
-        padding: 20px; 
+        padding: 25px; 
         border: 1px solid #D4AF37; 
         border-radius: 15px; 
         background-color: #1a1c23; 
@@ -125,15 +125,16 @@ with tab1:
 
         if inviter_name:
             st.markdown("<div class='inviter-box'>", unsafe_allow_html=True)
-            if show_gary_pic:
-                # Wir versuchen das Bild lokal zu laden
-                if os.path.exists("gary.png"):
-                    st.image("gary.png", width=150)
-                else:
-                    # Fallback falls lokal nicht findbar
-                    st.image(GARY_RAW_URL, width=150)
             
-            st.markdown(f"<p style='color:#888;margin:0;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
+            # BILD-LOGIK (angepasst auf Gary.png)
+            if show_gary_pic:
+                if os.path.exists("Gary.png"):
+                    st.image("Gary.png", width=120)
+                else:
+                    # Notfall-Lösung falls der Dateiname doch anders ist
+                    st.info("Profilbild wird geladen...")
+            
+            st.markdown(f"<p style='color:#888;margin:0;font-size:0.8em;letter-spacing:1px;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
             
             with st.form("join"):
                 st.write("### Deine Daten")
@@ -141,7 +142,7 @@ with tab1:
                 with col1: vorname = st.text_input("Vorname", placeholder="z.B. Max")
                 with col2: nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
                 email = st.text_input("E-Mail Adresse", placeholder="name@beispiel.de")
-                phone = st.text_input("Handynummer (+49...)", placeholder="+49 173 1234567")
+                phone = st.text_input("Handynummer", placeholder="+49 173 1234567")
                 birth_date_picker = st.date_input("Geburtsdatum", min_value=datetime(1940, 1, 1), max_value=datetime.now(), format="DD.MM.YYYY")
                 
                 if st.form_submit_button("JETZT BEITRETEN"):
@@ -166,7 +167,7 @@ with tab1:
                                 st.image(get_qr(final_link), width=200)
                                 st.balloons()
                             else:
-                                st.error("Fehler beim Speichern.")
+                                st.error("Speichern fehlgeschlagen.")
                     else: st.error("Bitte alles ausfüllen.")
         else: st.error("Link ungültig.")
     else:
@@ -174,6 +175,9 @@ with tab1:
         st.info("Beitritt nur über persönlichen Link möglich.")
 
 with tab2:
+    st.title("Admin-Panel")
     if st.sidebar.text_input("Admin-Passwort", type="password") == "gary123":
         st.metric("Mitglieder", len(df))
         st.dataframe(df, use_container_width=True)
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Liste als CSV laden", data=csv, file_name="export.csv")
