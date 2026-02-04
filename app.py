@@ -18,7 +18,23 @@ headers = {
 }
 
 # --- SETUP & DESIGN ---
-st.set_page_config(page_title="Trust Graph | Netzwerk", page_icon="🔐", layout="centered")
+# page_title und page_icon helfen WhatsApp bei der Vorschau
+st.set_page_config(
+    page_title="Exklusiver Trust Graph", 
+    page_icon="🔐", 
+    layout="centered"
+)
+
+# Meta-Tags für WhatsApp Vorschau erzwingen
+st.markdown(
+    f"""
+    <head>
+        <meta property="og:title" content="Exklusives Netzwerk - Direktion Vanselow" />
+        <meta property="og:description" content="Sichere dir deinen Zugang zum geschlossenen Netzwerk." />
+        <meta property="og:image" content="https://raw.githubusercontent.com/wolfgang-a11y/netzwerk-app/main/logo.png" />
+    </head>
+    """, unsafe_allow_html=True
+)
 
 st.markdown("""
     <style>
@@ -60,7 +76,6 @@ def add_member_to_notion(full_name, email, phone, inviter_name, slug, birth_date
     url = "https://api.notion.com/v1/pages"
     now_str = datetime.now().strftime("%d.%m.%Y %H:%M")
     birth_date_str = birth_date_obj.strftime("%d.%m.%Y")
-    
     payload = {
         "parent": {"database_id": DATABASE_ID},
         "properties": {
@@ -100,57 +115,45 @@ with tab1:
             with st.form("join"):
                 st.write("### Deine Daten")
                 col1, col2 = st.columns(2)
-                with col1:
-                    vorname = st.text_input("Vorname", placeholder="z.B. Max")
-                with col2:
-                    nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
-                
+                with col1: vorname = st.text_input("Vorname", placeholder="z.B. Max")
+                with col2: nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
                 email = st.text_input("E-Mail Adresse", placeholder="name@beispiel.de")
                 phone = st.text_input("Handynummer (+49...)", placeholder="+49 173 1234567")
-                
-                # Datum-Eingabe im deutschen Format
-                birth_date_picker = st.date_input(
-                    "Geburtsdatum", 
-                    min_value=datetime(1940, 1, 1), 
-                    max_value=datetime.now(),
-                    format="DD.MM.YYYY"
-                )
+                birth_date_picker = st.date_input("Geburtsdatum", min_value=datetime(1940, 1, 1), max_value=datetime.now(), format="DD.MM.YYYY")
                 
                 if st.form_submit_button("JETZT BEITRETEN"):
                     clean_phone = format_phone(phone)
                     if vorname and nachname and email and phone:
                         if len(re.sub(r'[^0-9]', '', clean_phone)) < 10:
-                            st.error("Bitte gib eine gültige Handynummer ein (mind. 8 Ziffern).")
+                            st.error("Bitte gib eine gültige Handynummer ein.")
                         elif not df.empty and email.lower().strip() in df['Email'].values:
                             st.warning("Bereits registriert!")
                             user_slug = df[df['Email'] == email.lower().strip()].iloc[0]['Code']
-                            link = f"https://vanselow-network.streamlit.app/?invite={user_slug}"
-                            st.code(link)
-                            st.image(get_qr(link), width=200)
+                            st.code(f"https://vanselow-network.streamlit.app/?invite={user_slug}")
                         else:
                             full_name = f"{vorname.strip()} {nachname.strip()}"
                             new_slug = re.sub(r'[^a-zA-Z]', '', vorname).lower()
-                            
                             res = add_member_to_notion(full_name, email.lower().strip(), clean_phone, inviter_name, new_slug, birth_date_picker)
-                            
                             if res.status_code == 200:
                                 st.success(f"Willkommen, {vorname}!")
                                 final_link = f"https://vanselow-network.streamlit.app/?invite={new_slug}"
+                                st.divider()
+                                st.write("### Dein Einladungs-Link:")
                                 st.code(final_link)
                                 st.image(get_qr(final_link), width=200)
                                 st.balloons()
                             else:
-                                st.error("Fehler beim Speichern in Notion.")
-                                st.write("Details:", res.text)
-                    else: st.error("Bitte alle Felder ausfüllen.")
+                                st.error("Fehler beim Speichern.")
+                    else: st.error("Bitte alles ausfüllen.")
         else: st.error("Link ungültig.")
     else:
         st.title("🔐 Geschlossenes System")
         st.info("Beitritt nur über persönlichen Link möglich.")
 
 with tab2:
+    st.title("Admin-Panel")
     if st.sidebar.text_input("Admin-Passwort", type="password") == "gary123":
         st.metric("Mitglieder", len(df))
         st.dataframe(df, use_container_width=True)
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Liste laden", data=csv, file_name="export.csv")
+        st.download_button("📥 Liste als CSV laden", data=csv, file_name="export.csv")
