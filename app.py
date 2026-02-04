@@ -4,6 +4,7 @@ import uuid
 import qrcode
 import requests
 import re
+import os
 from io import BytesIO
 from datetime import datetime
 
@@ -24,16 +25,16 @@ st.set_page_config(
     layout="centered"
 )
 
-# Das Bild, das wir bei GitHub hochgeladen haben (Link zur 'Raw'-Datei)
-GARY_IMAGE_URL = "https://raw.githubusercontent.com/wolfgang-a11y/netzwerk-app/main/gary.png"
+# Dynamische Bild-URL für WhatsApp (angepasst an deinen GitHub Branch 'hauptsächlich')
+GARY_RAW_URL = "https://raw.githubusercontent.com/wolfgang-a11y/Netzwerk-App/hauptsächlich/gary.png"
 
-# Meta-Daten für die "sexy" Vorschau in WhatsApp/Telegram
+# Meta-Tags für WhatsApp Vorschau
 st.markdown(
     f"""
     <head>
         <meta property="og:title" content="Einladung von Direktion Vanselow" />
-        <meta property="og:description" content="Exklusiver Zugang zum geschlossenen Netzwerk." />
-        <meta property="og:image" content="{GARY_IMAGE_URL}" />
+        <meta property="og:description" content="Sichere dir deinen exklusiven Zugang zum Netzwerk." />
+        <meta property="og:image" content="{GARY_RAW_URL}" />
         <meta property="og:type" content="website" />
     </head>
     """, unsafe_allow_html=True
@@ -44,18 +45,12 @@ st.markdown("""
     .stButton>button { width: 100%; background-color: #D4AF37 !important; color: black !important; font-weight: bold; height: 3.5em; border: none; border-radius: 8px; }
     h1, h2, h3 {color: #D4AF37 !important;}
     .inviter-box {
-        padding: 30px; 
+        padding: 20px; 
         border: 1px solid #D4AF37; 
         border-radius: 15px; 
         background-color: #1a1c23; 
         text-align: center; 
         margin-bottom: 25px;
-    }
-    .gary-img {
-        border-radius: 50%;
-        border: 3px solid #D4AF37;
-        margin-bottom: 15px;
-        object-fit: cover;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -129,10 +124,15 @@ with tab1:
             show_gary_pic = False
 
         if inviter_name:
-            # Edle Einladungs-Box mit Bild (falls Gary einlädt)
             st.markdown("<div class='inviter-box'>", unsafe_allow_html=True)
             if show_gary_pic:
-                st.image(GARY_IMAGE_URL, width=120)
+                # Wir versuchen das Bild lokal zu laden
+                if os.path.exists("gary.png"):
+                    st.image("gary.png", width=150)
+                else:
+                    # Fallback falls lokal nicht findbar
+                    st.image(GARY_RAW_URL, width=150)
+            
             st.markdown(f"<p style='color:#888;margin:0;'>EXKLUSIVE EINLADUNG VON</p><h2 style='margin:0;'>{inviter_name}</h2></div>", unsafe_allow_html=True)
             
             with st.form("join"):
@@ -141,7 +141,7 @@ with tab1:
                 with col1: vorname = st.text_input("Vorname", placeholder="z.B. Max")
                 with col2: nachname = st.text_input("Nachname", placeholder="z.B. Mustermann")
                 email = st.text_input("E-Mail Adresse", placeholder="name@beispiel.de")
-                phone = st.text_input("Handynummer", placeholder="+49 173 1234567")
+                phone = st.text_input("Handynummer (+49...)", placeholder="+49 173 1234567")
                 birth_date_picker = st.date_input("Geburtsdatum", min_value=datetime(1940, 1, 1), max_value=datetime.now(), format="DD.MM.YYYY")
                 
                 if st.form_submit_button("JETZT BEITRETEN"):
@@ -174,9 +174,6 @@ with tab1:
         st.info("Beitritt nur über persönlichen Link möglich.")
 
 with tab2:
-    st.title("Admin-Panel")
     if st.sidebar.text_input("Admin-Passwort", type="password") == "gary123":
         st.metric("Mitglieder", len(df))
         st.dataframe(df, use_container_width=True)
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Liste als CSV laden", data=csv, file_name="export.csv")
